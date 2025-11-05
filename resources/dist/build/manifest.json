@@ -1,0 +1,20 @@
+{
+  "resources/css/alt-ai-addon.css": {
+    "file": "assets/alt-ai-addon-3082c44b.css",
+    "isEntry": true,
+    "src": "resources/css/alt-ai-addon.css"
+  },
+  "resources/js/alt-ai-addon.js": {
+    "dynamicImports": [
+      "resources/js/modules/ai-prompt-builder.js"
+    ],
+    "file": "assets/alt-ai-addon-97ff1a61.js",
+    "isEntry": true,
+    "src": "resources/js/alt-ai-addon.js"
+  },
+  "resources/js/modules/ai-prompt-builder.js": {
+    "file": "assets/ai-prompt-builder-76e18902.js",
+    "isDynamicEntry": true,
+    "src": "resources/js/modules/ai-prompt-builder.js"
+  }
+}

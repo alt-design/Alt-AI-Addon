@@ -51,10 +51,9 @@ class ServiceProvider extends AddonServiceProvider
             'saved_prompts' => [],
         ]);
 
-        // Build endpoint URLs manually to avoid route dependency issues during boot
         $cpRoute = config('statamic.cp.route', 'cp');
 
-        $dataToProvide = [
+        Statamic::provideToScript([
             'altAiConfig' => [
                 'apiKey' => $config['api_key'],
                 'capabilities' => $config['capabilities'],
@@ -68,8 +67,6 @@ class ServiceProvider extends AddonServiceProvider
                     'agent' => '/' . trim($cpRoute, '/') . '/alt-ai/agent',
                 ],
             ],
-        ];
-
-        Statamic::provideToScript($dataToProvide);
+        ]);
     }
 }

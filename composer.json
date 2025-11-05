@@ -1,8 +1,7 @@
 {
     "name": "alt-design/alt-ai",
-    "description": "Alt AI addon, add AI-powered content assistance to your site",
+    "description": "Alt AI addon, content bits and bobs at their finest",
     "license": "MIT",
-    "type": "statamic-addon",
     "autoload": {
         "psr-4": {
             "AltDesign\\AltAi\\": "src"
@@ -21,11 +20,6 @@
             "providers": [
                 "AltDesign\\AltAi\\ServiceProvider"
             ]
-        }
-    },
-    "config": {
-        "allow-plugins": {
-            "pixelfear/composer-dist-plugin": false
         }
     }
 }
