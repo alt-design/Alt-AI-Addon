@@ -1,0 +1,26 @@
+{
+    "name": "@alt-design/tiptap-ai-agent",
+    "version": "1.0.0",
+    "description": "TipTap AI Agent integration for Statamic Bard editor",
+    "main": "dist/js/tiptap-ai-agent.js",
+    "scripts": {
+        "dev": "webpack --mode development --watch",
+        "build": "webpack --mode production"
+    },
+    "keywords": [
+        "statamic",
+        "tiptap",
+        "ai",
+        "bard",
+        "editor"
+    ],
+    "author": "Alt Design",
+    "license": "MIT",
+    "dependencies": {
+        "@tiptap/core": "^2.2.4"
+    },
+    "devDependencies": {
+        "webpack": "^5.89.0",
+        "webpack-cli": "^5.1.4"
+    }
+}

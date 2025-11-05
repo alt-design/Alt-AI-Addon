@@ -1,0 +1,24 @@
+{
+    "name": "alt-design/alt-ai-addon",
+    "description": "AI-powered content assistance for Statamic",
+    "type": "statamic-addon",
+    "autoload": {
+        "psr-4": {
+            "AltDesign\\TiptapAiAgent\\": "src"
+        }
+    },
+    "require": {
+        "statamic/cms": "^4.0 || ^5.0"
+    },
+    "extra": {
+        "statamic": {
+            "name": "Alt AI Addon",
+            "description": "AI-powered content assistance for Statamic with chat widget and Bard editor integration"
+        },
+        "laravel": {
+            "providers": [
+                "AltDesign\\TiptapAiAgent\\ServiceProvider"
+            ]
+        }
+    }
+}
