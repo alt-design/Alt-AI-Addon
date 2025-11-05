@@ -13,31 +13,12 @@ class AiChatController
      */
     public function chat(Request $request)
     {
-        // Log incoming request for debugging
-        Log::info('Alt AI: Chat request received', [
-            'has_message' => $request->has('message'),
-            'has_conversation_history' => $request->has('conversation_history'),
-            'has_context' => $request->has('context'),
-            'has_mode' => $request->has('mode'),
-            'message_length' => strlen($request->input('message', '')),
-            'context_type' => gettype($request->input('context')),
-            'all_keys' => array_keys($request->all()),
+        $validated = $request->validate([
+            'message' => 'required|string|max:10000',
+            'conversation_history' => 'nullable|array',
+            'context' => 'nullable|array',
+            'mode' => 'nullable|string|in:chat,update_fields',
         ]);
-
-        try {
-            $validated = $request->validate([
-                'message' => 'required|string|max:10000',
-                'conversation_history' => 'nullable|array',
-                'context' => 'nullable|array',
-                'mode' => 'nullable|string|in:chat,update_fields', // 'chat' = normal chat, 'update_fields' = AI can modify fields
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Alt AI: Validation failed', [
-                'errors' => $e->errors(),
-                'request_data' => $request->all(),
-            ]);
-            throw $e;
-        }
 
         $apiKey = config('alt-ai.api_key');
 
@@ -50,7 +31,6 @@ class AiChatController
         try {
             $mode = $validated['mode'] ?? 'chat';
 
-            // Build conversation messages
             $messages = $this->buildMessages(
                 $validated['message'],
                 $validated['conversation_history'] ?? [],
@@ -58,60 +38,10 @@ class AiChatController
                 $mode
             );
 
-            // Call OpenAI API
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $apiKey,
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
-                'model' => config('alt-ai.model.name', 'gpt-4'),
-                'messages' => $messages,
-                'temperature' => config('alt-ai.model.temperature', 0.7),
-                'max_tokens' => config('alt-ai.model.max_tokens', 2000),
-            ]);
-
-            if (!$response->successful()) {
-                Log::error('OpenAI API error', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-
-                return response()->json([
-                    'error' => 'AI service error: ' . $response->status()
-                ], 500);
-            }
-
-            $data = $response->json();
+            $data = $this->callOpenAI($messages, $apiKey);
             $aiMessage = $data['choices'][0]['message']['content'] ?? '';
 
-            // Parse JSON response if in update_fields mode
-            $fieldUpdates = null;
-            if ($mode === 'update_fields') {
-                try {
-                    // Try to extract JSON from the response (AI might wrap it in markdown code blocks)
-                    $jsonStr = $aiMessage;
-
-                    // Remove markdown code blocks if present
-                    if (preg_match('/```json\s*(\{.*?\})\s*```/s', $jsonStr, $matches)) {
-                        $jsonStr = $matches[1];
-                    } elseif (preg_match('/```\s*(\{.*?\})\s*```/s', $jsonStr, $matches)) {
-                        $jsonStr = $matches[1];
-                    }
-
-                    // Parse JSON
-                    $parsedData = json_decode($jsonStr, true);
-
-                    if ($parsedData && isset($parsedData['action']) && $parsedData['action'] === 'update_fields') {
-                        // No auto-correction - AI must use exact field names from the system prompt
-                        // The frontend will handle validation and skip fields that don't exist
-                        $fieldUpdates = $parsedData;
-                    }
-                } catch (\Exception $e) {
-                    Log::warning('Failed to parse field updates JSON', [
-                        'error' => $e->getMessage(),
-                        'response' => $aiMessage
-                    ]);
-                }
-            }
+            $fieldUpdates = $this->parseFieldUpdates($aiMessage, $mode);
 
             return response()->json([
                 'message' => $aiMessage,
@@ -121,10 +51,7 @@ class AiChatController
             ]);
 
         } catch (\Exception $e) {
-            Log::error('AI Chat error', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('AI Chat error: ' . $e->getMessage());
 
             return response()->json([
                 'error' => 'Failed to process chat request: ' . $e->getMessage()
@@ -153,7 +80,6 @@ class AiChatController
         }
 
         try {
-            // Build agent messages with document context
             $messages = $this->buildAgentMessages(
                 $validated['message'],
                 $validated['document_content'] ?? '',
@@ -161,29 +87,7 @@ class AiChatController
                 $validated['conversation_history'] ?? []
             );
 
-            // Call OpenAI API
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $apiKey,
-                'Content-Type' => 'application/json',
-            ])->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
-                'model' => config('alt-ai.model.name', 'gpt-4'),
-                'messages' => $messages,
-                'temperature' => config('alt-ai.model.temperature', 0.7),
-                'max_tokens' => config('alt-ai.model.max_tokens', 2000),
-            ]);
-
-            if (!$response->successful()) {
-                Log::error('OpenAI API error', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-
-                return response()->json([
-                    'error' => 'AI service error: ' . $response->status()
-                ], 500);
-            }
-
-            $data = $response->json();
+            $data = $this->callOpenAI($messages, $apiKey);
 
             return response()->json([
                 'message' => $data['choices'][0]['message']['content'] ?? '',
@@ -191,10 +95,7 @@ class AiChatController
             ]);
 
         } catch (\Exception $e) {
-            Log::error('AI Agent error', [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
+            Log::error('AI Agent error: ' . $e->getMessage());
 
             return response()->json([
                 'error' => 'Failed to process agent request: ' . $e->getMessage()
@@ -203,60 +104,95 @@ class AiChatController
     }
 
     /**
+     * Call OpenAI API with messages
+     */
+    protected function callOpenAI($messages, $apiKey)
+    {
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $apiKey,
+            'Content-Type' => 'application/json',
+        ])->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
+            'model' => config('alt-ai.model.name', 'gpt-4'),
+            'messages' => $messages,
+            'temperature' => config('alt-ai.model.temperature', 0.7),
+            'max_tokens' => config('alt-ai.model.max_tokens', 2000),
+        ]);
+
+        if (!$response->successful()) {
+            Log::error('OpenAI API error', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return response()->json([
+                'error' => 'AI service error: ' . $response->status()
+            ], 500);
+        }
+
+        return $response->json();
+    }
+
+    /**
+     * Parse field updates from AI response
+     */
+    protected function parseFieldUpdates($aiMessage, $mode)
+    {
+        if ($mode !== 'update_fields') {
+            return null;
+        }
+
+        try {
+            $jsonStr = $aiMessage;
+
+            // Remove markdown code blocks if present
+            if (preg_match('/```json\s*(\{.*?\})\s*```/s', $jsonStr, $matches)) {
+                $jsonStr = $matches[1];
+            } elseif (preg_match('/```\s*(\{.*?\})\s*```/s', $jsonStr, $matches)) {
+                $jsonStr = $matches[1];
+            }
+
+            $parsedData = json_decode($jsonStr, true);
+
+            if ($parsedData && isset($parsedData['action']) && $parsedData['action'] === 'update_fields') {
+                return $parsedData;
+            }
+        } catch (\Exception $e) {
+            // Silent failure - field updates are optional
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert any value to a safe string representation
+     */
+    protected function convertToString($value)
+    {
+        return match (true) {
+            is_null($value) => '',
+            is_bool($value) => $value ? 'Yes' : 'No',
+            is_string($value) || is_numeric($value) => (string)$value,
+            is_array($value) => data_get($value, 'name')
+                ?? data_get($value, 'handle')
+                ?? data_get($value, 'title')
+                ?? collect($value)->filter(fn($item) => is_scalar($item))->implode(', ')
+                ?: '[Array]',
+            is_object($value) => rescue(fn() => (string)$value,
+                fn() => data_get($value, 'name')
+                    ?? data_get($value, 'handle')
+                    ?? data_get($value, 'title')
+                    ?? '[Object]',
+                false),
+            default => (string)$value,
+        };
+    }
+
+    /**
      * Build messages array for chat conversations
      */
     protected function buildMessages($userMessage, $conversationHistory, $context, $mode = 'chat')
     {
         $messages = [];
-
-        // Helper function to safely convert any value to string for concatenation
-        $safeString = function($value) {
-            if (is_string($value)) {
-                return $value;
-            } elseif (is_numeric($value)) {
-                return (string)$value;
-            } elseif (is_bool($value)) {
-                return $value ? 'Yes' : 'No';
-            } elseif (is_array($value)) {
-                // If it's an array, try to extract a meaningful string
-                if (isset($value['name'])) {
-                    return $value['name'];
-                } elseif (isset($value['handle'])) {
-                    return $value['handle'];
-                } elseif (isset($value['title'])) {
-                    return $value['title'];
-                } else {
-                    // Extract only scalar values from array
-                    $scalarValues = array_filter($value, function($item) {
-                        return is_scalar($item);
-                    });
-
-                    // If we have scalar values, join them
-                    if (!empty($scalarValues)) {
-                        return implode(', ', $scalarValues);
-                    }
-
-                    // If array is empty or contains only non-scalar values
-                    return '[Array]';
-                }
-            } elseif (is_object($value)) {
-                // Try to extract a string representation from object
-                if (method_exists($value, '__toString')) {
-                    return (string)$value;
-                } elseif (isset($value->name)) {
-                    return $value->name;
-                } elseif (isset($value->handle)) {
-                    return $value->handle;
-                } elseif (isset($value->title)) {
-                    return $value->title;
-                } else {
-                    return '[Object]';
-                }
-            } elseif (is_null($value)) {
-                return '';
-            }
-            return (string)$value;
-        };
 
         // System message with comprehensive context awareness
         // Check for custom system prompt override
@@ -277,7 +213,7 @@ class AiChatController
         }
 
         if (!empty($context)) {
-            $systemPrompt .= "IMPORTANT: You have direct access to comprehensive information about what the user is currently viewing/editing:\n\n";
+            $systemPrompt .= "Current entry context:\n\n";
 
             // Page/Content Type
             if (isset($context['page_type'])) {
@@ -295,23 +231,23 @@ class AiChatController
             $systemPrompt .= "=== ENTRY INFORMATION ===\n";
 
             if (isset($context['title'])) {
-                $systemPrompt .= "Title: " . $safeString($context['title']) . "\n";
+                $systemPrompt .= "Title: " . $this->convertToString($context['title']) . "\n";
             }
 
             if (isset($context['slug'])) {
-                $systemPrompt .= "Slug: " . $safeString($context['slug']) . "\n";
+                $systemPrompt .= "Slug: " . $this->convertToString($context['slug']) . "\n";
             }
 
             if (isset($context['entry_id'])) {
-                $systemPrompt .= "Entry ID: " . $safeString($context['entry_id']) . "\n";
+                $systemPrompt .= "Entry ID: " . $this->convertToString($context['entry_id']) . "\n";
             }
 
             if (isset($context['permalink'])) {
-                $systemPrompt .= "Permalink: " . $safeString($context['permalink']) . "\n";
+                $systemPrompt .= "Permalink: " . $this->convertToString($context['permalink']) . "\n";
             }
 
             if (isset($context['status'])) {
-                $systemPrompt .= "Publication Status: " . ucfirst($safeString($context['status'])) . "\n";
+                $systemPrompt .= "Publication Status: " . ucfirst($this->convertToString($context['status'])) . "\n";
             }
 
             $systemPrompt .= "\n";
@@ -321,23 +257,23 @@ class AiChatController
                 $systemPrompt .= "=== STRUCTURE ===\n";
 
                 if (isset($context['collection'])) {
-                    $systemPrompt .= "Collection: " . $safeString($context['collection']) . "\n";
+                    $systemPrompt .= "Collection: " . $this->convertToString($context['collection']) . "\n";
                 }
 
                 if (isset($context['blueprint'])) {
-                    $systemPrompt .= "Blueprint: " . $safeString($context['blueprint']) . "\n";
+                    $systemPrompt .= "Blueprint: " . $this->convertToString($context['blueprint']) . "\n";
                 }
 
                 if (isset($context['taxonomy'])) {
-                    $systemPrompt .= "Taxonomy: " . $safeString($context['taxonomy']) . "\n";
+                    $systemPrompt .= "Taxonomy: " . $this->convertToString($context['taxonomy']) . "\n";
                 }
 
                 if (isset($context['global'])) {
-                    $systemPrompt .= "Global Set: " . $safeString($context['global']) . "\n";
+                    $systemPrompt .= "Global Set: " . $this->convertToString($context['global']) . "\n";
                 }
 
                 if (isset($context['parent'])) {
-                    $systemPrompt .= "Parent Entry: " . $safeString($context['parent']) . "\n";
+                    $systemPrompt .= "Parent Entry: " . $this->convertToString($context['parent']) . "\n";
                 }
 
                 $systemPrompt .= "\n";
@@ -348,19 +284,19 @@ class AiChatController
                 $systemPrompt .= "=== DATES & TIMELINE ===\n";
 
                 if (isset($context['date'])) {
-                    $systemPrompt .= "Date: " . $safeString($context['date']) . "\n";
+                    $systemPrompt .= "Date: " . $this->convertToString($context['date']) . "\n";
                 }
 
                 if (isset($context['auction_date'])) {
-                    $systemPrompt .= "Auction Date: " . $safeString($context['auction_date']) . "\n";
+                    $systemPrompt .= "Auction Date: " . $this->convertToString($context['auction_date']) . "\n";
                 }
 
                 if (isset($context['created_at'])) {
-                    $systemPrompt .= "Created: " . $safeString($context['created_at']) . "\n";
+                    $systemPrompt .= "Created: " . $this->convertToString($context['created_at']) . "\n";
                 }
 
                 if (isset($context['updated_at'])) {
-                    $systemPrompt .= "Last Updated: " . $safeString($context['updated_at']) . "\n";
+                    $systemPrompt .= "Last Updated: " . $this->convertToString($context['updated_at']) . "\n";
                 }
 
                 $systemPrompt .= "\n";
@@ -390,11 +326,11 @@ class AiChatController
                 $systemPrompt .= "=== AUCTION DETAILS ===\n";
 
                 if (isset($context['auctioneer'])) {
-                    $systemPrompt .= "Auctioneer: " . $safeString($context['auctioneer']) . "\n";
+                    $systemPrompt .= "Auctioneer: " . $this->convertToString($context['auctioneer']) . "\n";
                 }
 
                 if (isset($context['location'])) {
-                    $systemPrompt .= "Location: " . $safeString($context['location']) . "\n";
+                    $systemPrompt .= "Location: " . $this->convertToString($context['location']) . "\n";
                 }
 
                 $systemPrompt .= "\n";
@@ -409,7 +345,7 @@ class AiChatController
                 }
 
                 if (isset($context['author'])) {
-                    $systemPrompt .= "Entry Author: " . $safeString($context['author']) . "\n";
+                    $systemPrompt .= "Entry Author: " . $this->convertToString($context['author']) . "\n";
                 }
 
                 $systemPrompt .= "\n";
@@ -420,11 +356,11 @@ class AiChatController
                 $systemPrompt .= "=== SITE & LOCALIZATION ===\n";
 
                 if (isset($context['site'])) {
-                    $systemPrompt .= "Site: " . $safeString($context['site']) . "\n";
+                    $systemPrompt .= "Site: " . $this->convertToString($context['site']) . "\n";
                 }
 
                 if (isset($context['locale'])) {
-                    $systemPrompt .= "Locale: " . $safeString($context['locale']) . "\n";
+                    $systemPrompt .= "Locale: " . $this->convertToString($context['locale']) . "\n";
                 }
 
                 if (isset($context['multisite'])) {
@@ -437,7 +373,7 @@ class AiChatController
             // Navigation context
             if (isset($context['route'])) {
                 $systemPrompt .= "=== CURRENT LOCATION ===\n";
-                $systemPrompt .= "Control Panel Route: " . $safeString($context['route']) . "\n\n";
+                $systemPrompt .= "Control Panel Route: " . $this->convertToString($context['route']) . "\n\n";
             }
 
             // Field Label Mapping - Show relationship between handles and display labels
@@ -524,15 +460,8 @@ class AiChatController
             }
 
             $systemPrompt .= "---\n\n";
-            $systemPrompt .= "When the user asks questions about 'this entry', 'this auction', 'what I'm working on', etc., ";
-            $systemPrompt .= "you should reference the specific information provided above. You HAVE all this detailed context and can answer questions about it directly. ";
-            $systemPrompt .= "Do NOT say you don't have access to this information - it has been provided to you in the structured format above.\n\n";
-            $systemPrompt .= "Use this context to provide relevant, specific assistance. For example:\n";
-            $systemPrompt .= "- If helping with content, consider the collection type and blueprint structure\n";
-            $systemPrompt .= "- If suggesting dates, be aware of existing dates and timelines\n";
-            $systemPrompt .= "- If discussing organization, consider the categories and tags already applied\n";
-            $systemPrompt .= "- If providing auction-specific advice, use the auctioneer and location context\n";
-            $systemPrompt .= "- When asked about specific fields, reference the exact field values from the FIELD VALUES section above\n";
+            $systemPrompt .= "When the user asks about 'this entry' or 'what I'm working on', reference the information above. ";
+            $systemPrompt .= "Use this context to provide specific, relevant assistance based on the current entry's collection, dates, fields, and other metadata.\n";
         }
 
         $systemPrompt .= "\nYou can provide suggestions and guidance. When suggesting actions that could modify content, ";
@@ -541,46 +470,17 @@ class AiChatController
         // Add special instructions for field update mode
         if ($mode === 'update_fields') {
             $systemPrompt .= "\n\n=== FIELD UPDATE MODE ===\n";
-            $systemPrompt .= "IMPORTANT: You are now in FIELD UPDATE MODE. The user is asking you to suggest changes to the form fields.\n\n";
-            $systemPrompt .= "Based on the field values provided above, analyze the content and suggest improvements.\n";
-            $systemPrompt .= "You MUST respond with a JSON object in the following format:\n\n";
-            $systemPrompt .= "{\n";
-            $systemPrompt .= '  "action": "update_fields",' . "\n";
-            $systemPrompt .= '  "message": "Brief explanation of suggested changes",' . "\n";
-            $systemPrompt .= '  "changes": [' . "\n";
-            $systemPrompt .= "    {\n";
-            $systemPrompt .= '      "field": "field_name",' . "\n";
-            $systemPrompt .= '      "current_value": "current field value (first 50 chars for long text)",' . "\n";
-            $systemPrompt .= '      "proposed_value": "your suggested new value",' . "\n";
-            $systemPrompt .= '      "reason": "brief explanation why this change improves the content"' . "\n";
-            $systemPrompt .= "    }\n";
-            $systemPrompt .= "  ]\n";
-            $systemPrompt .= "}\n\n";
-            $systemPrompt .= "Guidelines:\n";
-            $systemPrompt .= "- Only suggest changes to fields that would genuinely improve the content\n";
-            $systemPrompt .= "- Focus on fields from the FIELD VALUES section above\n";
-            $systemPrompt .= "- ⚠️ CRITICAL: Copy the EXACT text shown in [BRACKETS] from the FIELD VALUES section\n";
-            $systemPrompt .= "  The format in FIELD VALUES is: [field_handle] value\n";
-            $systemPrompt .= "  Examples from the FIELD VALUES section:\n";
-            $systemPrompt .= "    - If you see '[contact_information] ...' use 'contact_information'\n";
-            $systemPrompt .= "    - If you see '[reason_for_sale] ...' use 'reason_for_sale'\n";
-            $systemPrompt .= "    - If you see '[auction_date] ...' use 'auction_date'\n";
-            $systemPrompt .= "    - If you see '[description] ...' use 'description'\n";
-            $systemPrompt .= "\n";
-            $systemPrompt .= "  🚫 COMMON MISTAKE TO AVOID:\n";
-            $systemPrompt .= "    WRONG: If the field displays as 'Auction Contact' in the UI, DO NOT use 'auction_contact'\n";
-            $systemPrompt .= "    RIGHT: Look for the [brackets] in FIELD VALUES section. If it says '[contact_information]', use exactly 'contact_information'\n";
-            $systemPrompt .= "    The display name (what users see) is DIFFERENT from the field handle (what you must use).\n";
-            $systemPrompt .= "    ALWAYS copy from [brackets], NEVER convert display names to snake_case.\n";
-            $systemPrompt .= "\n";
-            $systemPrompt .= "  DO NOT create your own field names. DO NOT convert anything to snake_case.\n";
-            $systemPrompt .= "  ONLY copy the exact characters from inside the [brackets] in the FIELD VALUES section.\n";
-            $systemPrompt .= "- For text fields, provide complete replacement text\n";
-            $systemPrompt .= "- For Bard/rich text fields, you can only suggest plain text (HTML will be handled by the editor)\n";
-            $systemPrompt .= "- Keep proposed values concise and appropriate for the field type\n";
-            $systemPrompt .= "- Only suggest changes where the proposed value is DIFFERENT from the current value\n";
-            $systemPrompt .= "- Provide clear reasons for each change\n";
-            $systemPrompt .= "- Return ONLY the JSON object, no additional text before or after\n";
+            $systemPrompt .= "Analyze the field values above and suggest improvements. Respond with JSON:\n\n";
+            $systemPrompt .= '{"action":"update_fields","message":"Brief explanation","changes":[{"field":"field_handle","current_value":"current","proposed_value":"new","reason":"why"}]}' . "\n\n";
+            $systemPrompt .= "Rules:\n";
+            $systemPrompt .= "- CRITICAL: Use EXACT field handles from [BRACKETS] in FIELD VALUES section above\n";
+            $systemPrompt .= "  Example: If you see '[contact_information] ...', use 'contact_information'\n";
+            $systemPrompt .= "  WRONG: Converting display label 'Auction Contact' to 'auction_contact'\n";
+            $systemPrompt .= "  RIGHT: Copying exact text from [brackets]: 'contact_information'\n";
+            $systemPrompt .= "- Never create field names or convert labels to snake_case\n";
+            $systemPrompt .= "- Only suggest genuine improvements where proposed differs from current\n";
+            $systemPrompt .= "- For rich text fields, suggest plain text only\n";
+            $systemPrompt .= "- Return only JSON, no additional text\n";
         }
 
         $messages[] = [
@@ -614,26 +514,20 @@ class AiChatController
     {
         $messages = [];
 
-        // System message for Bard agent - be explicit about document context
+        // System message for Bard agent
         $systemPrompt = "You are an AI writing assistant integrated into a rich text editor. ";
         $systemPrompt .= "You help users write, edit, and improve their content.\n\n";
 
-        // Tell AI exactly where to find the document content
         if (!empty($documentContent)) {
-            $systemPrompt .= "IMPORTANT: The user's message will include the full document content below their question/request, ";
-            $systemPrompt .= "marked with '--- Full Document Content ---'. You have complete access to this document. ";
-            $systemPrompt .= "When the user asks questions about 'this document' or 'the content', they are referring to the document content provided. ";
-            $systemPrompt .= "You can analyze, review, summarize, or answer questions about the document directly - you do NOT need to ask the user to provide context or select text.\n\n";
-        } else {
-            $systemPrompt .= "Note: No document content is currently available. You can still provide general writing assistance.\n\n";
+            $systemPrompt .= "The full document content is included below the user's message (marked '--- Full Document Content ---'). ";
+            $systemPrompt .= "Answer questions about 'this document' or 'the content' by referencing this provided text.\n\n";
         }
 
         if (!empty($selectedText) && $selectedText !== $documentContent) {
-            $systemPrompt .= "Additionally, the user has selected specific text in the document, marked with '--- Currently Selected Text ---'. ";
-            $systemPrompt .= "If their question is about 'this text' or 'the selection', they are referring to the selected text.\n\n";
+            $systemPrompt .= "Selected text is marked '--- Currently Selected Text ---'. Questions about 'this text' or 'the selection' refer to this.\n\n";
         }
 
-        $systemPrompt .= "When suggesting edits, provide clear, actionable text that can be directly inserted into the document.";
+        $systemPrompt .= "Provide clear, actionable text that can be directly inserted into the document.";
 
         $messages[] = [
             'role' => 'system',
@@ -683,23 +577,14 @@ class AiChatController
         $normalizedSuggested = strtolower(trim($suggestedField));
         $normalizedSuggested = preg_replace('/[^a-z0-9_]/', '_', $normalizedSuggested);
 
-        // FIRST: Check for exact match - if the suggested field exists, return it immediately
-        // This prevents false matches like "additional_information" being corrected to "contact_information"
+        // FIRST: Check for exact match
         foreach ($availableFields as $availableField) {
             if (strtolower($availableField) === $normalizedSuggested) {
-                Log::info('TipTap AI Agent: Exact field match found', [
-                    'suggested' => $suggestedField,
-                    'matched' => $availableField
-                ]);
                 return $availableField;
             }
         }
 
-        // SECOND: If no exact match, try fuzzy matching to correct typos/mistakes
-        Log::info('TipTap AI Agent: No exact match, attempting fuzzy matching', [
-            'suggested' => $suggestedField,
-            'normalized' => $normalizedSuggested
-        ]);
+        // SECOND: If no exact match, try fuzzy matching
 
         $bestMatch = null;
         $highestSimilarity = 0;
