@@ -4,23 +4,15 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | OpenAI API Key
+    | OpenAI API Key - https://platform.openai.com/api-keys
     |--------------------------------------------------------------------------
-    |
-    | Your OpenAI API key from https://platform.openai.com/api-keys
-    | Reference: https://tiptap.dev/docs/content-ai/capabilities/agent/custom-llms/get-started/openai-responses
-    |
     */
     'api_key' => env('OPENAI_API_KEY', ''),
 
     /*
     |--------------------------------------------------------------------------
-    | AI Agent Capabilities
+    | AI Agent Capabilities - Bard bits and bobs
     |--------------------------------------------------------------------------
-    |
-    | Enable/disable specific AI capabilities in the Bard editor.
-    | Available capabilities: completion, enhancement, summarization, etc.
-    |
     */
     'capabilities' => [
         'completion' => true,
@@ -32,12 +24,8 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | OpenAI Model Settings
+    | OpenAI Available Models - gpt-4, gpt-4-turbo-preview, gpt-3.5-turbo
     |--------------------------------------------------------------------------
-    |
-    | Configure the OpenAI model settings.
-    | Available models: gpt-4, gpt-4-turbo-preview, gpt-3.5-turbo, etc.
-    |
     */
     'model' => [
         'name' => env('OPENAI_MODEL', 'gpt-4'),
@@ -47,11 +35,8 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | UI Settings
+    | UI
     |--------------------------------------------------------------------------
-    |
-    | Customize the UI appearance and behavior of the AI Agent.
-    |
     */
     'ui' => [
         'floating_menu' => true,
