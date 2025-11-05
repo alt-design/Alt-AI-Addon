@@ -1,8 +1,8 @@
 {
-    "name": "@alt-design/tiptap-ai-agent",
+    "name": "@alt-design/alt-ai",
     "version": "1.0.0",
-    "description": "TipTap AI Agent integration for Statamic Bard editor",
-    "main": "dist/js/tiptap-ai-agent.js",
+    "description": "Alt AI addon for Statamic",
+    "main": "dist/js/alt-ai.js",
     "scripts": {
         "dev": "webpack --mode development --watch",
         "build": "webpack --mode production"

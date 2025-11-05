@@ -1,9 +1,9 @@
 <?php
 
-use AltDesign\TiptapAiAgent\Http\Controllers\AiChatController;
+use AltDesign\AltAi\Http\Controllers\AiChatController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('tiptap-ai-agent')->name('tiptap-ai-agent.')->group(function () {
+Route::prefix('alt-ai')->name('alt-ai.')->group(function () {
 
     // Chat widget endpoint
     Route::post('/chat', [AiChatController::class, 'chat'])->name('chat');

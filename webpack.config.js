@@ -1,10 +1,10 @@
 const path = require('path');
 
 module.exports = {
-    entry: './resources/js/tiptap-ai-agent.js',
+    entry: './resources/js/alt-ai.js',
     output: {
         path: path.resolve(__dirname, 'dist/js'),
-        filename: 'tiptap-ai-agent.js',
+        filename: 'alt-ai.js',
     },
     module: {
         rules: [

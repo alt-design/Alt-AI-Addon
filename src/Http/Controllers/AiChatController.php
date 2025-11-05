@@ -1,6 +1,6 @@
 <?php
 
-namespace AltDesign\TiptapAiAgent\Http\Controllers;
+namespace AltDesign\AltAi\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -13,14 +13,33 @@ class AiChatController
      */
     public function chat(Request $request)
     {
-        $validated = $request->validate([
-            'message' => 'required|string|max:10000',
-            'conversation_history' => 'array',
-            'context' => 'array',
-            'mode' => 'string|in:chat,update_fields', // 'chat' = normal chat, 'update_fields' = AI can modify fields
+        // Log incoming request for debugging
+        Log::info('Alt AI: Chat request received', [
+            'has_message' => $request->has('message'),
+            'has_conversation_history' => $request->has('conversation_history'),
+            'has_context' => $request->has('context'),
+            'has_mode' => $request->has('mode'),
+            'message_length' => strlen($request->input('message', '')),
+            'context_type' => gettype($request->input('context')),
+            'all_keys' => array_keys($request->all()),
         ]);
 
-        $apiKey = config('tiptap-ai-agent.api_key');
+        try {
+            $validated = $request->validate([
+                'message' => 'required|string|max:10000',
+                'conversation_history' => 'nullable|array',
+                'context' => 'nullable|array',
+                'mode' => 'nullable|string|in:chat,update_fields', // 'chat' = normal chat, 'update_fields' = AI can modify fields
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Alt AI: Validation failed', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all(),
+            ]);
+            throw $e;
+        }
+
+        $apiKey = config('alt-ai.api_key');
 
         if (empty($apiKey)) {
             return response()->json([
@@ -44,10 +63,10 @@ class AiChatController
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json',
             ])->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
-                'model' => config('tiptap-ai-agent.model.name', 'gpt-4'),
+                'model' => config('alt-ai.model.name', 'gpt-4'),
                 'messages' => $messages,
-                'temperature' => config('tiptap-ai-agent.model.temperature', 0.7),
-                'max_tokens' => config('tiptap-ai-agent.model.max_tokens', 2000),
+                'temperature' => config('alt-ai.model.temperature', 0.7),
+                'max_tokens' => config('alt-ai.model.max_tokens', 2000),
             ]);
 
             if (!$response->successful()) {
@@ -120,12 +139,12 @@ class AiChatController
     {
         $validated = $request->validate([
             'message' => 'required|string|max:10000',
-            'document_content' => 'string|nullable',
-            'selected_text' => 'string|nullable',
-            'conversation_history' => 'array',
+            'document_content' => 'nullable|string',
+            'selected_text' => 'nullable|string',
+            'conversation_history' => 'nullable|array',
         ]);
 
-        $apiKey = config('tiptap-ai-agent.api_key');
+        $apiKey = config('alt-ai.api_key');
 
         if (empty($apiKey)) {
             return response()->json([
@@ -147,10 +166,10 @@ class AiChatController
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json',
             ])->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
-                'model' => config('tiptap-ai-agent.model.name', 'gpt-4'),
+                'model' => config('alt-ai.model.name', 'gpt-4'),
                 'messages' => $messages,
-                'temperature' => config('tiptap-ai-agent.model.temperature', 0.7),
-                'max_tokens' => config('tiptap-ai-agent.model.max_tokens', 2000),
+                'temperature' => config('alt-ai.model.temperature', 0.7),
+                'max_tokens' => config('alt-ai.model.max_tokens', 2000),
             ]);
 
             if (!$response->successful()) {
