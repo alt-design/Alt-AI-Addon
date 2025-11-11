@@ -19,11 +19,36 @@ class ServiceProvider extends AddonServiceProvider
         'cp' => __DIR__.'/../routes/cp.php',
     ];
 
-    public function boot()
-    {
-        parent::boot();
+    protected $middlewareGroups = [
+        'statamic.cp.authenticated' => [
+            \AltDesign\AltAi\Http\Middleware\LoadAssets::class,
+        ],
+    ];
 
-        $this->bootScript();
+    protected function bootVite()
+    {
+        if (!$this->vite) {
+            return $this;
+        }
+
+        // Always set up publishing (needed for php artisan vendor:publish)
+        $name = $this->getAddon()->packageName();
+        $directory = $this->getAddon()->directory();
+        $config = $this->vite;
+
+        $publicDirectory = $config['publicDirectory'] ?? 'public';
+        $buildDirectory = $config['buildDirectory'] ?? 'build';
+
+        $publishSource = "{$directory}{$publicDirectory}/{$buildDirectory}/";
+        $publishTarget = public_path("vendor/{$name}/{$buildDirectory}/");
+
+        $this->publishes([
+            $publishSource => $publishTarget,
+        ], $this->getAddon()->slug());
+
+        // Only register Vite assets for inclusion if we're in an authenticated CP context
+        // The LoadAssets middleware will handle actual registration for authenticated users
+        return $this;
     }
 
     public function bootAddon()
@@ -37,36 +62,5 @@ class ServiceProvider extends AddonServiceProvider
                 '--tag' => 'alt-ai-config',
             ]);
         });
-    }
-
-    protected function bootScript()
-    {
-        $config = config('alt-ai', [
-            'api_key' => config('alt-ai.api_key'),
-            'capabilities' => [],
-            'model' => [],
-            'ui' => [],
-            'website_context' => '',
-            'system_prompt_override' => '',
-            'saved_prompts' => [],
-        ]);
-
-        $cpRoute = config('statamic.cp.route', 'cp');
-
-        Statamic::provideToScript([
-            'altAiConfig' => [
-                'apiKey' => $config['api_key'],
-                'capabilities' => $config['capabilities'],
-                'model' => $config['model'],
-                'ui' => $config['ui'],
-                'websiteContext' => $config['website_context'] ?? '',
-                'systemPromptOverride' => $config['system_prompt_override'] ?? '',
-                'savedPrompts' => $config['saved_prompts'] ?? [],
-                'endpoints' => [
-                    'chat' => '/' . trim($cpRoute, '/') . '/alt-ai/chat',
-                    'agent' => '/' . trim($cpRoute, '/') . '/alt-ai/agent',
-                ],
-            ],
-        ]);
     }
 }
