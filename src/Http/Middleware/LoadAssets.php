@@ -18,9 +18,9 @@ class LoadAssets
 
     protected function registerViteAssets()
     {
-        Statamic::vite('altdesign/alt-ai-addon', [
+        Statamic::vite('alt-design/alt-ai', [
             'hotFile' => __DIR__ . '/../../../resources/dist/hot',
-            'buildDirectory' => 'vendor/altdesign/alt-ai-addon/build',
+            'buildDirectory' => 'vendor/alt-ai/build',
             'input' => [
                 'resources/js/alt-ai-addon.js',
                 'resources/css/alt-ai-addon.css',
