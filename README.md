@@ -17,11 +17,8 @@
 
 ## How to Install
 
-This addon is located in your addons directory. If you plan to modify the JavaScript, install dependencies:
-
 ```bash
-cd addons/Alt-AI-Addon
-npm install
+composer require alt-design/alt-ai
 ```
 
 Publish the configuration file:
@@ -151,20 +148,6 @@ editor.commands.aiTranslate('es')
 editor.commands.aiAdjustTone('formal')
 ```
 
-## Development
-
-Build the JavaScript after making changes:
-
-```bash
-cd addons/Alt-AI-Addon
-npm run build
-```
-
-For development with auto-rebuild:
-
-```bash
-npm run dev
-```
 
 ## Troubleshooting
 
@@ -191,19 +174,6 @@ npm run dev
 ### Rate Limiting
 
 OpenAI has rate limits based on your account tier. Consider upgrading your OpenAI plan if you encounter rate limit errors.
-
-## Technical Details
-
-The addon integrates with Statamic's Bard editor using TipTap extensions and connects to OpenAI's Chat Completions API. Architecture includes:
-
-- ServiceProvider for Statamic registration and configuration injection
-- JavaScript modules for AI agent and chat widget functionality
-- API client for OpenAI integration
-- Message builder for context-aware conversations
-
-References:
-- [OpenAI API Documentation](https://platform.openai.com/docs/api-reference/chat/create)
-- [TipTap Custom LLMs](https://tiptap.dev/docs/content-ai/capabilities/agent/custom-llms/get-started/openai-responses)
 
 ## Questions etc
 
