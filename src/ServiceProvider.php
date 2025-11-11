@@ -61,6 +61,11 @@ class ServiceProvider extends AddonServiceProvider
             $command->call('vendor:publish', [
                 '--tag' => 'alt-ai-config',
             ]);
+
+            // Publish Vite assets (manifest.json and compiled JS/CSS)
+            $command->call('vendor:publish', [
+                '--tag' => 'alt-ai-addon',
+            ]);
         });
     }
 }
