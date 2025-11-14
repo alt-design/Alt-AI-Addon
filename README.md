@@ -68,7 +68,7 @@ Available OpenAI models: `gpt-4` (most capable), `gpt-4-turbo-preview` (faster),
 
 ## Usage
 
-## What the frig can it do?
+### What the frig can it do?
 Good question. AI's somewhat unpredictable - so sometimes it'll work better than others. Prompt it specifically and it should be able to do "stuff".
 **What we know it does do**
 - It knows the context of the page
