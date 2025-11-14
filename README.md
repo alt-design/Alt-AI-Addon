@@ -1,4 +1,4 @@
-# Alt AI Addon
+# Alt AI Addon - BETA
 
 > AI-powered content assistance for Statamic Bard using OpenAI
 
@@ -67,6 +67,18 @@ return [
 Available OpenAI models: `gpt-4` (most capable), `gpt-4-turbo-preview` (faster), or `gpt-3.5-turbo` (efficient for simpler tasks).
 
 ## Usage
+
+## What the frig can it do?
+Good question. AI's somewhat unpredictable - so sometimes it'll work better than others. Prompt it specifically and it should be able to do "stuff".
+**What we know it does do**
+- It knows the context of the page
+- It can edit simple fields
+
+**What we're unsure of**
+- Complex page builders
+- Every field type
+
+We've tested it on Bard fields, simple fields, radio buttons and checkboxes - I'll add to the list as I come across them.
 
 ### Enabling AI Buttons in Bard Fields
 
