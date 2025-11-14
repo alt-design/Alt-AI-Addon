@@ -1,6 +1,6 @@
 # Alt AI Addon - BETA
 
-> AI-powered content assistance for Statamic Bard using OpenAI
+> AI-powered content assistance for Bard & Other bits using OpenAI
 
 ## Features
 
@@ -8,7 +8,7 @@
 - Global AI chat widget available throughout the Statamic control panel
 - AI completion for auto-completing text based on context
 - Content enhancement to improve grammar, clarity, and readability
-- Text summarization for creating concise summaries
+- Text summarisation for creating concise summaries
 - Translation capabilities for multiple languages
 - Tone adjustment (formal, casual, professional, friendly)
 - Context-aware assistance that understands your page, collection, and entry
